@@ -309,29 +309,29 @@ defmodule Ash.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:spark, "~> 1.1 and >= 1.1.50"},
+      {:comparable, "~> 1.0"},
+      {:decimal, "~> 2.0"},
       {:earmark, "~> 1.4"},
       {:ecto, "~> 3.7"},
       {:ets, "~> 0.8"},
-      {:decimal, "~> 2.0"},
-      {:picosat_elixir, "~> 0.2"},
-      {:comparable, "~> 1.0"},
       {:jason, ">= 1.0.0"},
+      {:picosat_elixir, "~> 0.2"},
+      {:plug, ">= 0.0.0", optional: true},
+      {:reactor, "~> 0.3 and >= 0.3.4", optional: true},
+      {:spark, "~> 1.1 and >= 1.1.50"},
       {:stream_data, "~> 0.6"},
       {:telemetry, "~> 1.1"},
-      {:plug, ">= 0.0.0", optional: true},
-      {:reactor, "~> 0.3 and >= 0.3.3", optional: true},
 
       # Dev/Test dependencies
-      {:ex_doc, github: "elixir-lang/ex_doc", only: [:dev, :test], runtime: false},
-      {:ex_check, "~> 0.12", only: [:dev, :test]},
+      {:benchee, "~> 1.1", only: [:dev, :test]},
       {:credo, ">= 0.0.0", only: [:dev, :test], runtime: false},
       {:dialyxir, ">= 0.0.0", only: [:dev, :test], runtime: false},
-      {:sobelow, ">= 0.0.0", only: [:dev, :test], runtime: false},
+      {:doctor, "~> 0.21", only: [:dev, :test]},
+      {:ex_check, "~> 0.12", only: [:dev, :test]},
+      {:ex_doc, github: "elixir-lang/ex_doc", only: [:dev, :test], runtime: false},
       {:git_ops, "~> 2.5", only: [:dev, :test]},
       {:mix_test_watch, "~> 1.0", only: [:dev, :test], runtime: false},
-      {:benchee, "~> 1.1", only: [:dev, :test]},
-      {:doctor, "~> 0.21", only: [:dev, :test]}
+      {:sobelow, ">= 0.0.0", only: [:dev, :test], runtime: false}
     ]
   end
 
