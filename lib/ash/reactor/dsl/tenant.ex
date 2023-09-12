@@ -14,8 +14,10 @@ defmodule Ash.Reactor.Dsl.Tenant do
         }
 
   @doc false
-  def __entity__,
-    do: %Spark.Dsl.Entity{
+  def __entity__ do
+    template_type = Template.type()
+
+    %Spark.Dsl.Entity{
       name: :tenant,
       describe: "Specifies the action tenant",
       args: [:source],
@@ -23,9 +25,7 @@ defmodule Ash.Reactor.Dsl.Tenant do
       identifier: {:auto, :unique_integer},
       schema: [
         source: [
-          type:
-            {:or,
-             [{:struct, Template.Input}, {:struct, Template.Result}, {:struct, Template.Value}]},
+          type: template_type,
           required: true,
           doc: """
           What to use as the source of the tenant.
@@ -44,4 +44,5 @@ defmodule Ash.Reactor.Dsl.Tenant do
         ]
       ]
     }
+  end
 end

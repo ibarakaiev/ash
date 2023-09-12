@@ -15,7 +15,6 @@ defmodule Ash.Reactor.Dsl.Transformer do
     with {:ok, dsl_state} <- transform_steps(dsl_state) do
       {:ok, dsl_state}
     end
-    |> IO.inspect(label: "*** TRANSFORMER RAN ***")
   end
 
   defp transform_steps(dsl_state) do
@@ -68,7 +67,7 @@ defmodule Ash.Reactor.Dsl.Transformer do
   defp transform_nested_steps(parent_entity, _dsl_state), do: {:ok, parent_entity}
 
   defp transform_entity_api(entity, dsl_state) when is_nil(entity.api) do
-    default_api = Transformer.get_option(dsl_state, [:ash_reactor], :api)
+    default_api = Transformer.get_option(dsl_state, [:ash], :default_api)
 
     cond do
       is_nil(default_api) ->
@@ -87,7 +86,7 @@ defmodule Ash.Reactor.Dsl.Transformer do
         {:error,
          DslError.exception(
            module: Transformer.get_entities(dsl_state, :module),
-           path: [:ash_reactor, :api],
+           path: [:ash, :default_api],
            message:
              "The #{entity.type} step `#{inspect(entity.name)}` has no API set, and the default API is set to `#{inspect(default_api)}`, which is not a valid Ash API."
          )}
@@ -101,7 +100,7 @@ defmodule Ash.Reactor.Dsl.Transformer do
       {:error,
        DslError.exception(
          module: Transformer.get_entities(dsl_state, :module),
-         path: [:ash_reactor, :api],
+         path: [:ash, :default_api],
          message:
            "The #{entity.type} step `#{inspect(entity.name)}` has its API set to `#{inspect(entity.api)}` but it is not a valid Ash API."
        )}

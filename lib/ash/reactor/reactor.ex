@@ -4,11 +4,11 @@ defmodule Ash.Reactor do
   which provides steps for working with Ash resources and actions.
   """
 
-  @ash_reactor %Spark.Dsl.Section{
-    name: :ash_reactor,
-    describe: "Additional configuration for the `Ash.Reactor` extension",
+  @ash %Spark.Dsl.Section{
+    name: :ash,
+    describe: "Ash-related configuration for the `Ash.Reactor` extension",
     schema: [
-      api: [
+      default_api: [
         type: {:behaviour, Ash.Api},
         doc: "An API to use by default when calling actions",
         required: false
@@ -17,7 +17,7 @@ defmodule Ash.Reactor do
   }
 
   use Spark.Dsl.Extension,
-    sections: [@ash_reactor],
+    sections: [@ash],
     transformers: [__MODULE__.Dsl.Transformer],
     dsl_patches:
       ~w[Create]

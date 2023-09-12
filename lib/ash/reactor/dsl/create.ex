@@ -1,35 +1,34 @@
 defmodule Ash.Reactor.Dsl.Create do
   @moduledoc """
-  The `create` entity for the Ash.Reactor reactor extension.
+  The `create` entity for the `Ash.Reactor` reactor extension.
   """
 
   defstruct __identifier__: nil,
             action: nil,
+            actor: [],
             api: nil,
-            arguments: [],
             description: nil,
+            inputs: [],
             name: nil,
             resource: nil,
-            steps: [],
+            tenant: [],
+            transform: nil,
             type: :create,
+            wait_for: [],
             upsert_identity: nil,
             upsert?: false
 
   @type t :: %__MODULE__{
           __identifier__: any,
           action: atom,
+          actor: [Ash.Reactor.Dsl.Actor.t()],
           api: Ash.Api.t(),
-          arguments: [
-            Ash.Reactor.Dsl.ActionArgument.t()
-            | Ash.Reactor.Dsl.ActionAttribute.t()
-            | Ash.Reactor.Dsl.Actor.t()
-            | Ash.Reactor.Dsl.Tenant.t()
-            | Reactor.Dsl.WaitFor.t()
-          ],
           name: atom,
+          inputs: [Ash.Reactor.Dsl.Inputs.t()],
           resource: module,
-          steps: [struct],
+          tenant: [Ash.Reactor.Dsl.Tenant.t()],
           type: :create,
+          wait_for: [Reactor.Dsl.WaitFor.t()],
           upsert_identity: nil | atom,
           upsert?: boolean
         }
@@ -42,23 +41,25 @@ defmodule Ash.Reactor.Dsl.Create do
       examples: [
         """
         create :create_post, MyApp.Post, :create do
-          attribute :title, input(:post_title)
-          argument :author_id, result(:create_user, [:id])
+          inputs %{
+            title: input(:post_title),
+            author_id: result(:get_user, [:id])
+          }
+          actor result(:get_user)
+          tenant result(:get_organisation)
         end
         """
       ],
-      no_depend_modules: [:resource],
+      no_depend_modules: [:api, :resource],
       target: __MODULE__,
-      args: [:name, :resource, :action],
+      args: [:name, :resource, {:optional, :action}],
       identifier: :name,
+      # imports: [Reactor.Dsl.Argument],
       entities: [
-        arguments: [
-          Ash.Reactor.Dsl.ActionArgument.__entity__(),
-          Ash.Reactor.Dsl.ActionAttribute.__entity__(),
-          Ash.Reactor.Dsl.Actor.__entity__(),
-          Ash.Reactor.Dsl.Tenant.__entity__(),
-          Reactor.Dsl.WaitFor.__entity__()
-        ]
+        actor: [Ash.Reactor.Dsl.Actor.__entity__()],
+        inputs: [Ash.Reactor.Dsl.Inputs.__entity__()],
+        tenant: [Ash.Reactor.Dsl.Tenant.__entity__()],
+        wait_for: [Reactor.Dsl.WaitFor.__entity__()]
       ],
       singleton_entity_keys: [:actor, :tenant],
       recursive_as: :steps,
@@ -74,7 +75,7 @@ defmodule Ash.Reactor.Dsl.Create do
           """
         ],
         resource: [
-          type: :module,
+          type: {:spark, Ash.Resource},
           required: true,
           doc: """
           The resource to call the action on.
@@ -82,7 +83,7 @@ defmodule Ash.Reactor.Dsl.Create do
         ],
         action: [
           type: :atom,
-          required: true,
+          required: false,
           doc: """
           The name of the action to call on the resource.
           """
@@ -104,10 +105,10 @@ defmodule Ash.Reactor.Dsl.Create do
           doc: "A description for the step"
         ],
         api: [
-          type: {:behaviour, Ash.Api},
+          type: {:spark, Ash.Api},
           required: false,
           doc:
-            "The API to use when calling the action.  Defaults to the API set in the `ash_reactor` section."
+            "The API to use when calling the action.  Defaults to the API set in the `ash` section."
         ]
       ]
     }

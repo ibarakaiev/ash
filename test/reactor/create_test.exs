@@ -34,23 +34,26 @@ defmodule Ash.Test.ReactorCreateTest do
     @moduledoc false
     use Reactor, extensions: [Ash.Reactor]
 
-    ash_reactor do
-      api Api
+    ash do
+      default_api Api
     end
 
     input :title
     input :sub_title
 
     create :create_post, Post, :create do
-      attribute :title, input(:title)
-      attribute :sub_title, input(:title)
+      inputs(%{title: :wat})
+      # inputs(%{
+      #   title: input(:title),
+      #   sub_title: input(:sub_title)
+      # })
     end
 
     # step :create_post do
     #   run fn _ -> {:ok, "Hello World"} end
     # end
 
-    return(:create_post)
+    return :create_post
   end
 
   test "it can create a post" do
