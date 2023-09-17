@@ -17,7 +17,7 @@ defmodule Ash.Test.ReactorCreateTest do
     end
 
     actions do
-      defaults [:create, :read, :update, :destroy]
+      defaults [:read, :update, :destroy]
     end
   end
 
@@ -42,11 +42,11 @@ defmodule Ash.Test.ReactorCreateTest do
     input :sub_title
 
     create :create_post, Post, :create do
-      inputs(%{title: :wat})
-      # inputs(%{
-      #   title: input(:title),
-      #   sub_title: input(:sub_title)
-      # })
+      # inputs(%{title: :wat})
+      inputs(%{
+        title: input(:title),
+        sub_title: input(:sub_title)
+      })
     end
 
     # step :create_post do

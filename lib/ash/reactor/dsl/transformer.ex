@@ -23,7 +23,7 @@ defmodule Ash.Reactor.Dsl.Transformer do
     |> Enum.reduce_while({:ok, dsl_state}, fn entity, {:ok, dsl_state} ->
       case transform_step(entity, dsl_state) do
         :ok ->
-          {:cont, :ok}
+          {:cont, {:ok, dsl_state}}
 
         {:ok, entity} ->
           {:cont, {:ok, Transformer.replace_entity(dsl_state, [:reactor], entity)}}
@@ -36,10 +36,10 @@ defmodule Ash.Reactor.Dsl.Transformer do
 
   defp transform_step(entity, dsl_state) when is_action_step(entity) do
     with {:ok, entity} <- transform_entity_api(entity, dsl_state),
+         :ok <- validate_entity_api(entity, dsl_state),
          :ok <- validate_entity_resource(entity, dsl_state),
          {:ok, action} <- get_entity_resource_action(entity, dsl_state),
-         :ok <- validate_entity_action_arguments(entity, action, dsl_state),
-         :ok <- validate_entity_action_attributes(entity, action, dsl_state),
+         :ok <- validate_entity_inputs(entity, action, dsl_state),
          :ok <- maybe_validate_upsert_identity(entity, dsl_state),
          {:ok, entity} <- transform_nested_steps(entity, dsl_state) do
       {:ok, entity}
@@ -66,36 +66,15 @@ defmodule Ash.Reactor.Dsl.Transformer do
 
   defp transform_nested_steps(parent_entity, _dsl_state), do: {:ok, parent_entity}
 
-  defp transform_entity_api(entity, dsl_state) when is_nil(entity.api) do
+  defp transform_entity_api(entity, dsl_state) do
     default_api = Transformer.get_option(dsl_state, [:ash], :default_api)
 
-    cond do
-      is_nil(default_api) ->
-        {:error,
-         DslError.exception(
-           module: Transformer.get_entities(dsl_state, :module),
-           path: [:reactor, entity.type, entity.name],
-           message:
-             "The #{entity.type} step `#{inspect(entity.name)}` has no API set, and no default API is set"
-         )}
-
-      Spark.implements_behaviour?(default_api, Ash.Api) ->
-        {:ok, %{entity | api: default_api}}
-
-      true ->
-        {:error,
-         DslError.exception(
-           module: Transformer.get_entities(dsl_state, :module),
-           path: [:ash, :default_api],
-           message:
-             "The #{entity.type} step `#{inspect(entity.name)}` has no API set, and the default API is set to `#{inspect(default_api)}`, which is not a valid Ash API."
-         )}
-    end
+    {:ok, %{entity | api: entity.api || default_api}}
   end
 
-  defp transform_entity_api(entity, dsl_state) do
-    if Spark.implements_behaviour?(entity.api, Ash.Api) do
-      {:ok, entity}
+  defp validate_entity_api(entity, dsl_state) do
+    if entity.api.spark_is() == Ash.Api do
+      :ok
     else
       {:error,
        DslError.exception(
@@ -108,7 +87,7 @@ defmodule Ash.Reactor.Dsl.Transformer do
   end
 
   defp validate_entity_resource(entity, dsl_state) do
-    if Spark.implements_behaviour?(entity.resource, Ash.Resource) do
+    if entity.resource.spark_is() == Ash.Resource do
       :ok
     else
       {:error,
@@ -119,6 +98,24 @@ defmodule Ash.Reactor.Dsl.Transformer do
            "The #{entity.type} step `#{inspect(entity.name)}` has its resource set to `#{inspect(entity.resource)}` but it is not a valid Ash resource."
        )}
     end
+  end
+
+  defp validate_entity_inputs(entity, action, dsl_state) do
+    argument_names = Enum.map(action.arguments, & &1.name)
+
+    input_names =
+      entity.resource
+      |> Ash.Resource.Info.attributes()
+      |> Enum.map(& &1.name)
+      |> Enum.filter(&(&1 in action.accept))
+      |> Enum.reject(&(&1 in action.reject))
+      |> Enum.concat(argument_names)
+
+    entity.inputs
+    |> Enum.flat_map(&Map.keys(&1.template))
+    |> Enum.all?()
+
+    :ok
   end
 
   defp get_entity_resource_action(entity, dsl_state) do
@@ -143,82 +140,6 @@ defmodule Ash.Reactor.Dsl.Transformer do
       action ->
         {:ok, action}
     end
-  end
-
-  defp validate_entity_action_arguments(entity, action, dsl_state) do
-    accepted_arguments = MapSet.new(action.arguments, & &1.name)
-
-    entity.arguments
-    |> Enum.filter(&is_struct(&1, Ash.Reactor.Dsl.ActionArgument))
-    |> Enum.reduce_while(:ok, fn argument, :ok ->
-      if MapSet.member?(accepted_arguments, argument.name) do
-        {:cont, :ok}
-      else
-        suggestions = sorted_suggestions(accepted_arguments, argument.name)
-
-        {:halt,
-         {:error,
-          DslError.exception(
-            module: Transformer.get_persisted(dsl_state, :module),
-            path: [:reactor, entity.type, entity.name],
-            message:
-              "The #{entity.type} step `#{inspect(entity.name)}` refers to an argument named `#{argument.name}` which doesn't exist." <>
-                suggestions
-          )}}
-      end
-    end)
-  end
-
-  defp validate_entity_action_attributes(entity, action, dsl_state) do
-    existing_attributes =
-      entity.resource
-      |> Ash.Resource.Info.attributes()
-      |> MapSet.new(& &1.name)
-
-    accepted_attributes = MapSet.new(action.accept)
-    rejected_attributes = MapSet.new(action.reject)
-
-    entity.arguments
-    |> Enum.filter(&is_struct(&1, Ash.Reactor.Dsl.ActionAttribute))
-    |> Enum.reduce_while(:ok, fn attribute, :ok ->
-      cond do
-        MapSet.member?(rejected_attributes, attribute.name) ->
-          {:error,
-           DslError.exception(
-             module: Transformer.get_persisted(dsl_state, :module),
-             path: [:reactor, entity.type, entity.name],
-             message:
-               "The #{entity.type} step `#{inspect(entity.name)}` refers to an attribute named `#{attribute.name}` but it is rejected by the action."
-           )}
-
-        MapSet.member?(accepted_attributes, attribute.name) ->
-          {:cont, :ok}
-
-        MapSet.member?(existing_attributes, attribute.name) && action.accept == [] ->
-          {:cont, :ok}
-
-        MapSet.member?(existing_attributes, attribute.name) ->
-          {:error,
-           DslError.exception(
-             module: Transformer.get_persisted(dsl_state, :module),
-             path: [:reactor, entity.type, entity.name],
-             message:
-               "The #{entity.type} step `#{inspect(entity.name)}` refers to an attribute named `#{attribute.name}` but it is not accepted by the action."
-           )}
-
-        true ->
-          suggestions = sorted_suggestions(existing_attributes, attribute.name)
-
-          {:error,
-           DslError.exception(
-             module: Transformer.get_persisted(dsl_state, :module),
-             path: [:reactor, entity.type, entity.name],
-             message:
-               "The #{entity.type} step `#{inspect(entity.name)}` refers to an attribute named `#{attribute.name}` but it does not exist." <>
-                 suggestions
-           )}
-      end
-    end)
   end
 
   defp maybe_validate_upsert_identity(entity, dsl_state)

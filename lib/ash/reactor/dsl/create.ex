@@ -54,7 +54,7 @@ defmodule Ash.Reactor.Dsl.Create do
       target: __MODULE__,
       args: [:name, :resource, {:optional, :action}],
       identifier: :name,
-      # imports: [Reactor.Dsl.Argument],
+      imports: [Reactor.Dsl.Argument],
       entities: [
         actor: [Ash.Reactor.Dsl.Actor.__entity__()],
         inputs: [Ash.Reactor.Dsl.Inputs.__entity__()],

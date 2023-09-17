@@ -23,6 +23,7 @@ defmodule Ash.Reactor.Dsl.Tenant do
       args: [:source],
       imports: [Reactor.Dsl.Argument],
       identifier: {:auto, :unique_integer},
+      target: __MODULE__,
       schema: [
         source: [
           type: template_type,

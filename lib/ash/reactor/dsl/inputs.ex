@@ -42,12 +42,10 @@ defmodule Ash.Reactor.Dsl.Inputs do
       target: __MODULE__,
       args: [:template],
       identifier: {:auto, :unique_integer},
-      # imports: [Reactor.Dsl.Argument],
+      imports: [Reactor.Dsl.Argument],
       schema: [
         template: [
-          # type: {:or, [{:map, :atom, template_type}, {:keyword_list, template_type}]},
-          # type: {:map, :atom, template_type},
-          type: :any,
+          type: {:or, [{:map, :atom, template_type}, {:keyword_list, template_type}]},
           required: true
         ]
       ],
@@ -56,9 +54,8 @@ defmodule Ash.Reactor.Dsl.Inputs do
   end
 
   @doc false
-  @spec __transform__(t) :: t
+  @spec __transform__(t) :: {:ok, t} | {:error, any}
   def __transform__(entity) do
-    IO.inspect(entity)
-    %{entity | template: Map.new(entity.template)}
+    {:ok, %{entity | template: Map.new(entity.template)}}
   end
 end
