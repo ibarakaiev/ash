@@ -17,7 +17,7 @@ defmodule Ash.Test.ReactorCreateTest do
     end
 
     actions do
-      defaults [:read, :update, :destroy]
+      defaults [:create, :read, :update, :destroy]
     end
   end
 
@@ -42,11 +42,11 @@ defmodule Ash.Test.ReactorCreateTest do
     input :sub_title
 
     create :create_post, Post, :create do
-      # inputs(%{title: :wat})
-      inputs(%{
-        title: input(:title),
-        sub_title: input(:sub_title)
-      })
+      inputs(%{title: input(:title)})
+
+      inputs %{sub_title: input(:sub_title)} do
+        transform fn inputs -> %{sub_title: String.upcase(inputs.sub_title)} end
+      end
     end
 
     # step :create_post do
@@ -57,6 +57,14 @@ defmodule Ash.Test.ReactorCreateTest do
   end
 
   test "it can create a post" do
-    assert {:ok, :wat} = Reactor.run(CreatePostReactor, %{title: "Title", sub_title: "Sub-title"})
+    CreatePostReactor.reactor()
+    |> Map.get(:plan)
+    |> Graph.vertices()
+    |> IO.inspect()
+
+    assert {:error, [wat]} =
+             Reactor.run(CreatePostReactor, %{title: "Title", sub_title: "Sub-title"})
+
+    raise wat
   end
 end

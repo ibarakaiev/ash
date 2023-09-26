@@ -35,7 +35,8 @@ defmodule Ash.Reactor.Dsl.Actor do
           """
         ],
         transform: [
-          type: {:or, [{:spark_function_behaviour, Step, {Step.Transform, 1}}, nil]},
+          type:
+            {:or, [{:spark_function_behaviour, Reactor.Step, {Reactor.Step.Transform, 1}}, nil]},
           required: false,
           default: nil,
           doc: """

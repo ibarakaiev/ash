@@ -317,7 +317,7 @@ defmodule Ash.MixProject do
       {:jason, ">= 1.0.0"},
       {:picosat_elixir, "~> 0.2"},
       {:plug, ">= 0.0.0", optional: true},
-      {:reactor, "~> 0.3 and >= 0.3.5"},
+      {:reactor, "~> 0.4 and >= 0.4.1"},
       {:spark, "~> 1.1 and >= 1.1.50"},
       {:stream_data, "~> 0.6"},
       {:telemetry, "~> 1.1"},

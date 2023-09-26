@@ -4,13 +4,15 @@ defmodule Ash.Reactor.Dsl.Inputs do
   """
 
   defstruct __identifier__: nil,
-            template: %{}
+            template: %{},
+            transform: nil
 
   @type t :: %__MODULE__{
           __identifier__: any,
           template:
             %{optional(atom) => Reactor.Template.t()}
-            | Keyword.t(Reactor.Template.t())
+            | Keyword.t(Reactor.Template.t()),
+          transform: nil | (any -> any) | {module, keyword} | mfa
         }
 
   @doc false
@@ -47,6 +49,16 @@ defmodule Ash.Reactor.Dsl.Inputs do
         template: [
           type: {:or, [{:map, :atom, template_type}, {:keyword_list, template_type}]},
           required: true
+        ],
+        transform: [
+          type:
+            {:or, [{:spark_function_behaviour, Reactor.Step, {Reactor.Step.Transform, 1}}, nil]},
+          required: false,
+          default: nil,
+          doc: """
+          An optional transformation function which will transform the inputs
+          before executing the action.
+          """
         ]
       ],
       transform: {__MODULE__, :__transform__, []}

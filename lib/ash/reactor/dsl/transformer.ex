@@ -39,7 +39,9 @@ defmodule Ash.Reactor.Dsl.Transformer do
          :ok <- validate_entity_api(entity, dsl_state),
          :ok <- validate_entity_resource(entity, dsl_state),
          {:ok, action} <- get_entity_resource_action(entity, dsl_state),
-         :ok <- validate_entity_inputs(entity, action, dsl_state),
+         :ok <- validate_entity_input_names(entity, action, dsl_state),
+         :ok <- validate_entity_input_dupes(entity, dsl_state),
+         :ok <- validate_entity_input_empty(entity, dsl_state),
          :ok <- maybe_validate_upsert_identity(entity, dsl_state),
          {:ok, entity} <- transform_nested_steps(entity, dsl_state) do
       {:ok, entity}
@@ -100,23 +102,156 @@ defmodule Ash.Reactor.Dsl.Transformer do
     end
   end
 
-  defp validate_entity_inputs(entity, action, dsl_state) do
+  defp validate_entity_input_dupes(%{inputs: [_]} = _entity, _dsl_state), do: :ok
+
+  defp validate_entity_input_dupes(%{inputs: [_ | _]} = entity, dsl_state) do
+    entity.inputs
+    |> Enum.map(&MapSet.new(Map.keys(&1.template)))
+    |> Enum.reduce(&MapSet.intersection/2)
+    |> Enum.to_list()
+    |> case do
+      [] ->
+        :ok
+
+      [key] ->
+        message = """
+        The #{entity.type} step `#{inspect(entity.name)}` defines multiple inputs for `#{key}`.
+        """
+
+        {:error,
+         DslError.exception(
+           module: Transformer.get_persisted(dsl_state, :module),
+           path: [:reactor, entity.type, entity.name],
+           message: message
+         )}
+
+      keys ->
+        keys_sentence =
+          keys
+          |> Enum.map(&"`#{&1}`")
+          |> to_sentence(final_sep: " and ")
+
+        message = """
+        The #{entity.type} step `#{inspect(entity.name)}` defines multiple inputs for the keys #{keys_sentence}.
+        """
+
+        {:error,
+         DslError.exception(
+           module: Transformer.get_persisted(dsl_state, :module),
+           path: [:reactor, entity.type, entity.name],
+           message: message
+         )}
+    end
+  end
+
+  defp validate_entity_input_dupes(_entity, _dsl_state), do: :ok
+
+  defp validate_entity_input_empty(entity, dsl_state) do
+    entity.inputs
+    |> Enum.filter(&Enum.empty?(&1.template))
+    |> case do
+      [] ->
+        :ok
+
+      [_] ->
+        message = """
+        The #{entity.type} step `#{inspect(entity.name)}` defines an empty input template.
+        """
+
+        {:error,
+         DslError.exception(
+           module: Transformer.get_persisted(dsl_state, :module),
+           path: [:reactor, entity.type, entity.name],
+           message: message
+         )}
+
+      _ ->
+        message = """
+        The #{entity.type} step `#{inspect(entity.name)}` defines empty input templates.
+        """
+
+        {:error,
+         DslError.exception(
+           module: Transformer.get_persisted(dsl_state, :module),
+           path: [:reactor, entity.type, entity.name],
+           message: message
+         )}
+    end
+  end
+
+  defp validate_entity_input_names(entity, action, dsl_state) do
     argument_names = Enum.map(action.arguments, & &1.name)
 
-    input_names =
+    allowed_input_names =
       entity.resource
       |> Ash.Resource.Info.attributes()
       |> Enum.map(& &1.name)
-      |> Enum.filter(&(&1 in action.accept))
-      |> Enum.reject(&(&1 in action.reject))
+      |> maybe_accept_inputs(action.accept)
+      |> maybe_reject_inputs(action.reject)
       |> Enum.concat(argument_names)
+      |> MapSet.new()
 
-    entity.inputs
-    |> Enum.flat_map(&Map.keys(&1.template))
-    |> Enum.all?()
+    provided_input_names =
+      entity.inputs
+      |> Enum.flat_map(&Map.keys(&1.template))
+      |> MapSet.new()
 
-    :ok
+    provided_input_names
+    |> MapSet.difference(allowed_input_names)
+    |> Enum.to_list()
+    |> case do
+      [] ->
+        :ok
+
+      [extra] ->
+        suggestions =
+          allowed_input_names
+          |> Enum.map(&to_string/1)
+          |> sorted_suggestions(extra)
+
+        message = """
+        The #{entity.type} step `#{inspect(entity.name)} refers to an input named `#{extra}` which doesn't exist.
+
+        #{suggestions}
+        """
+
+        {:error,
+         DslError.exception(
+           module: Transformer.get_persisted(dsl_state, :module),
+           path: [:reactor, entity.type, entity.name],
+           message: message
+         )}
+
+      extras ->
+        suggestions =
+          allowed_input_names
+          |> Enum.map(&to_string/1)
+          |> sorted_suggestions(hd(extras))
+
+        extras_sentence =
+          extras
+          |> Enum.map(&"`#{&1}`")
+          |> to_sentence(final_sep: " and ")
+
+        message = """
+        The #{entity.type} step `#{inspect(entity.name)} refers to an inputs named #{extras_sentence} which don't exist.
+
+        #{suggestions}
+        """
+
+        {:error,
+         DslError.exception(
+           module: Transformer.get_persisted(dsl_state, :module),
+           path: [:reactor, entity.type, entity.name],
+           message: message
+         )}
+    end
   end
+
+  defp maybe_accept_inputs(input_names, []), do: input_names
+  defp maybe_accept_inputs(input_names, accepts), do: Enum.filter(input_names, &(&1 in accepts))
+  defp maybe_reject_inputs(input_names, []), do: input_names
+  defp maybe_reject_inputs(input_names, rejects), do: Enum.reject(input_names, &(&1 in rejects))
 
   defp get_entity_resource_action(entity, dsl_state) do
     case Ash.Resource.Info.action(entity.resource, entity.action, entity.type) do
@@ -174,19 +309,26 @@ defmodule Ash.Reactor.Dsl.Transformer do
     suggestions
     |> Enum.map(&to_string/1)
     |> Enum.sort_by(&String.jaro_distance(&1, tried))
-    |> case do
-      [suggestion] ->
-        "\n\nDid you mean `#{suggestion}`?"
+    |> Enum.map(&"`#{&1}`")
+    |> to_sentence()
+    |> then(&"\n\nDid you mean #{&1}?")
+  end
 
-      suggestions ->
-        [last | rest] = Enum.reverse(suggestions)
+  defp to_sentence(values, opts \\ [])
 
-        rest =
-          rest
-          |> Enum.reverse()
-          |> Enum.map_join(", ", &"`#{&1}`")
+  defp to_sentence([value], _opts), do: to_string(value)
 
-        "\n\nDid you mean #{rest} or `#{last}`?"
-    end
+  defp to_sentence([_ | _] = values, opts) do
+    [last | rest] = Enum.reverse(values)
+
+    sep = Keyword.get(opts, :sep, ", ")
+    final_sep = Keyword.get(opts, :final_sep, " or ")
+
+    rest =
+      rest
+      |> Enum.reverse()
+      |> Enum.join(sep)
+
+    "#{rest}#{final_sep}#{last}"
   end
 end

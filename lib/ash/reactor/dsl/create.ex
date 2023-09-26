@@ -7,6 +7,7 @@ defmodule Ash.Reactor.Dsl.Create do
             action: nil,
             actor: [],
             api: nil,
+            async?: true,
             description: nil,
             inputs: [],
             name: nil,
@@ -23,6 +24,7 @@ defmodule Ash.Reactor.Dsl.Create do
           action: atom,
           actor: [Ash.Reactor.Dsl.Actor.t()],
           api: Ash.Api.t(),
+          async?: boolean,
           name: atom,
           inputs: [Ash.Reactor.Dsl.Inputs.t()],
           resource: module,
@@ -109,6 +111,11 @@ defmodule Ash.Reactor.Dsl.Create do
           required: false,
           doc:
             "The API to use when calling the action.  Defaults to the API set in the `ash` section."
+        ],
+        async?: [
+          type: :boolean,
+          required: false,
+          default: true
         ]
       ]
     }
