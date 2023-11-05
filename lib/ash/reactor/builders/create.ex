@@ -2,7 +2,7 @@ defimpl Reactor.Dsl.Build, for: Ash.Reactor.Dsl.Create do
   @moduledoc false
 
   alias Ash.Reactor.{CreateStep, Dsl.Create, MergeInputsStep}
-  alias Reactor.{Argument, Builder, Dsl.Build, Step.ReturnAllArguments}
+  alias Reactor.{Argument, Builder, Step.ReturnAllArguments}
   alias Spark.Dsl
 
   @spec build(Create.t(), Reactor.t()) :: {:ok, Reactor.t()} | {:error, any}
@@ -16,7 +16,7 @@ defimpl Reactor.Dsl.Build, for: Ash.Reactor.Dsl.Create do
 
       action_options =
         create
-        |> Map.take([:action, :api, :resource, :upsert_identity, :upsert?])
+        |> Map.take([:action, :api, :authorize?, :resource, :upsert_identity, :upsert?])
         |> Enum.to_list()
 
       step_options =
@@ -50,7 +50,7 @@ defimpl Reactor.Dsl.Build, for: Ash.Reactor.Dsl.Create do
       name = {:__input__, create.name, Map.keys(input.template)}
 
       case Builder.add_step(reactor, name, ReturnAllArguments, arguments,
-             #  transform: input.transform,
+             transform: input.transform,
              ref: :step_name
            ) do
         {:ok, reactor} -> {:cont, {:ok, reactor, [name | result_names]}}

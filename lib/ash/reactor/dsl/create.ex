@@ -5,13 +5,16 @@ defmodule Ash.Reactor.Dsl.Create do
 
   defstruct __identifier__: nil,
             action: nil,
+            action_step?: true,
             actor: [],
             api: nil,
             async?: true,
+            authorize?: nil,
             description: nil,
             inputs: [],
             name: nil,
             resource: nil,
+            steps: [],
             tenant: [],
             transform: nil,
             type: :create,
@@ -22,12 +25,16 @@ defmodule Ash.Reactor.Dsl.Create do
   @type t :: %__MODULE__{
           __identifier__: any,
           action: atom,
+          action_step?: true,
           actor: [Ash.Reactor.Dsl.Actor.t()],
           api: Ash.Api.t(),
           async?: boolean,
+          authorize?: boolean | nil,
+          description: String.t() | nil,
           name: atom,
           inputs: [Ash.Reactor.Dsl.Inputs.t()],
           resource: module,
+          steps: [Reactor.Step.t()],
           tenant: [Ash.Reactor.Dsl.Tenant.t()],
           type: :create,
           wait_for: [Reactor.Dsl.WaitFor.t()],
@@ -48,7 +55,7 @@ defmodule Ash.Reactor.Dsl.Create do
             author_id: result(:get_user, [:id])
           }
           actor result(:get_user)
-          tenant result(:get_organisation)
+          tenant result(:get_organisation, [:id])
         end
         """
       ],
@@ -66,6 +73,37 @@ defmodule Ash.Reactor.Dsl.Create do
       singleton_entity_keys: [:actor, :tenant],
       recursive_as: :steps,
       schema: [
+        action: [
+          type: :atom,
+          required: false,
+          doc: """
+          The name of the action to call on the resource.
+          """
+        ],
+        api: [
+          type: {:spark, Ash.Api},
+          required: false,
+          doc:
+            "The API to use when calling the action.  Defaults to the API set in the `ash` section."
+        ],
+        async?: [
+          type: :boolean,
+          required: false,
+          default: true,
+          doc:
+            "When set to true the step will be executed asynchronously via Reactor's `TaskSupervisor`."
+        ],
+        authorize?: [
+          type: {:or, [:boolean, nil]},
+          required: false,
+          default: nil,
+          doc: "Explicitly enable or disable authorization for the action."
+        ],
+        description: [
+          type: :string,
+          required: false,
+          doc: "A description for the step"
+        ],
         name: [
           type: :atom,
           required: true,
@@ -83,39 +121,16 @@ defmodule Ash.Reactor.Dsl.Create do
           The resource to call the action on.
           """
         ],
-        action: [
+        upsert_identity: [
           type: :atom,
           required: false,
-          doc: """
-          The name of the action to call on the resource.
-          """
+          doc: "The identity to use for the upsert"
         ],
         upsert?: [
           type: :boolean,
           required: false,
           default: false,
           doc: "Whether or not this action should be executed as an upsert."
-        ],
-        upsert_identity: [
-          type: :atom,
-          required: false,
-          doc: "The identity to use for the upsert"
-        ],
-        description: [
-          type: :string,
-          required: false,
-          doc: "A description for the step"
-        ],
-        api: [
-          type: {:spark, Ash.Api},
-          required: false,
-          doc:
-            "The API to use when calling the action.  Defaults to the API set in the `ash` section."
-        ],
-        async?: [
-          type: :boolean,
-          required: false,
-          default: true
         ]
       ]
     }

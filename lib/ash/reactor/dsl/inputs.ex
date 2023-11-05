@@ -52,7 +52,8 @@ defmodule Ash.Reactor.Dsl.Inputs do
         ],
         transform: [
           type:
-            {:or, [{:spark_function_behaviour, Reactor.Step, {Reactor.Step.Transform, 1}}, nil]},
+            {:or,
+             [{:spark_function_behaviour, Reactor.Step, {Reactor.Step.TransformAll, 1}}, nil]},
           required: false,
           default: nil,
           doc: """

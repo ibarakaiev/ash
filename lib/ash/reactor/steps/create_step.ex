@@ -6,21 +6,20 @@ defmodule Ash.Reactor.CreateStep do
 
   alias Ash.Changeset
 
-  def run(arguments, context, options) do
-    create_options =
+  def run(arguments, _context, options) do
+    changeset_options =
       options
-      |> Keyword.take(~w[upsert? upsert_identity authorize?]a)
+      |> maybe_set_kw(:authorize?, options[:authorize?])
+      |> maybe_set_kw(:upsert_identity, options[:upsert_identity])
+      |> maybe_set_kw(:upsert?, options[:upsert?])
+      |> maybe_set_kw(:actor, arguments[:actor])
+      |> maybe_set_kw(:tenant, arguments[:tenant])
 
     options[:resource]
-    |> Changeset.for_create(options[:action], arguments[:input])
-    |> maybe_set_tenant(arguments[:tenant])
-    |> maybe_set_actor(arguments[:actor])
-    |> options[:api].create(create_options)
+    |> Changeset.for_create(options[:action], arguments[:input], changeset_options)
+    |> options[:api].create()
   end
 
-  defp maybe_set_tenant(changeset, nil), do: changeset
-  defp maybe_set_tenant(changeset, tenant), do: Changeset.set_tenant(changeset, tenant)
-
-  defp maybe_set_actor(changeset, nil), do: changeset
-  defp maybe_set_actor(changeset, actor), do: Changeset.set_actor(changeset, actor)
+  defp maybe_set_kw(keywords, _key, nil), do: keywords
+  defp maybe_set_kw(keywords, key, value), do: Keyword.put(keywords, key, value)
 end

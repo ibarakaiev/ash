@@ -1,72 +1,74 @@
-defmodule Ash.Reactor.Dsl.Transformer do
-  @moduledoc false
-  alias Spark.{Dsl.Transformer, Error.DslError}
+defmodule Ash.Reactor.Dsl.ActionTransformer do
+  @moduledoc """
+  Responsible for transforming actions.
+  """
+
+  alias Spark.{Dsl, Dsl.Transformer, Error.DslError}
+
   use Transformer
 
+  @doc false
+  @impl true
+  @spec before?(module) :: boolean
   def before?(Reactor.Dsl.Transformer), do: true
   def before?(_), do: false
 
-  def after?(_), do: false
-
-  defguardp is_action_step(module) when is_struct(module, Ash.Reactor.Dsl.Create)
-
-  @spec transform(Spark.Dsl.t()) :: {:ok, Spark.Dsl.t()} | {:error, any}
+  @doc false
+  @impl true
+  @spec transform(Dsl.t()) :: {:ok, Dsl.t()} | {:error, DslError.t()}
   def transform(dsl_state) do
-    with {:ok, dsl_state} <- transform_steps(dsl_state) do
-      {:ok, dsl_state}
-    end
-  end
-
-  defp transform_steps(dsl_state) do
     dsl_state
     |> Transformer.get_entities([:reactor])
-    |> Enum.reduce_while({:ok, dsl_state}, fn entity, {:ok, dsl_state} ->
-      case transform_step(entity, dsl_state) do
-        :ok ->
-          {:cont, {:ok, dsl_state}}
+    |> Enum.reduce_while({:ok, dsl_state}, fn
+      entity, {:ok, dsl_state} ->
+        case transform_step(entity, dsl_state) do
+          {:ok, entity, dsl_state} ->
+            {:cont, {:ok, Transformer.replace_entity(dsl_state, [:reactor], entity)}}
 
-        {:ok, entity} ->
-          {:cont, {:ok, Transformer.replace_entity(dsl_state, [:reactor], entity)}}
+          {:error, reason} ->
+            {:halt, {:error, reason}}
 
-        {:error, reason} ->
-          {:halt, {:error, reason}}
-      end
+          :ignore ->
+            {:cont, {:ok, dsl_state}}
+        end
     end)
   end
 
-  defp transform_step(entity, dsl_state) when is_action_step(entity) do
+  defp transform_step(entity, dsl_state) when entity.action_step? do
     with {:ok, entity} <- transform_entity_api(entity, dsl_state),
          :ok <- validate_entity_api(entity, dsl_state),
          :ok <- validate_entity_resource(entity, dsl_state),
          {:ok, action} <- get_entity_resource_action(entity, dsl_state),
+         entity <- %{entity | action: action.name},
          :ok <- validate_entity_input_names(entity, action, dsl_state),
          :ok <- validate_entity_input_dupes(entity, dsl_state),
          :ok <- validate_entity_input_empty(entity, dsl_state),
          :ok <- maybe_validate_upsert_identity(entity, dsl_state),
-         {:ok, entity} <- transform_nested_steps(entity, dsl_state) do
-      {:ok, entity}
+         {:ok, entity, dsl_state} <- transform_nested_steps(entity, dsl_state) do
+      {:ok, entity, dsl_state}
     end
   end
 
-  defp transform_step(entity, dsl_state), do: transform_nested_steps(entity, dsl_state)
+  defp transform_step(_entity, _dsl_state), do: :ignore
 
-  defp transform_nested_steps(parent_entity, dsl_state) when is_list(parent_entity.steps) do
-    parent_entity.steps
-    |> Enum.reduce_while({:ok, parent_entity}, fn entity, {:ok, parent_entity} ->
-      case transform_step(entity, dsl_state) do
-        :ok ->
-          {:cont, {:ok, %{parent_entity | steps: [entity | parent_entity.steps]}}}
+  defp transform_nested_steps(entity, dsl_state) when is_list(entity.steps) do
+    entity.steps
+    |> Enum.reduce_while({:ok, %{entity | steps: []}, dsl_state}, fn
+      step, {:ok, entity, dsl_state} ->
+        case transform_step(step, dsl_state) do
+          {:ok, step, dsl_state} ->
+            {:cont, {:ok, %{entity | steps: [step | entity.steps]}, dsl_state}}
 
-        {:ok, new_entity} ->
-          {:cont, {:ok, %{parent_entity | steps: [new_entity | parent_entity.steps]}}}
+          :ignore ->
+            {:cont, {:ok, %{entity | steps: [step | entity.steps]}, dsl_state}}
 
-        {:error, reason} ->
-          {:halt, {:error, reason}}
-      end
+          {:error, reason} ->
+            {:halt, {:error, reason}}
+        end
     end)
   end
 
-  defp transform_nested_steps(parent_entity, _dsl_state), do: {:ok, parent_entity}
+  defp transform_nested_steps(entity, dsl_state), do: {:ok, entity, dsl_state}
 
   defp transform_entity_api(entity, dsl_state) do
     default_api = Transformer.get_option(dsl_state, [:ash], :default_api)
@@ -253,6 +255,37 @@ defmodule Ash.Reactor.Dsl.Transformer do
   defp maybe_reject_inputs(input_names, []), do: input_names
   defp maybe_reject_inputs(input_names, rejects), do: Enum.reject(input_names, &(&1 in rejects))
 
+  defp get_entity_resource_action(entity, dsl_state) when is_nil(entity.action) do
+    entity.resource
+    |> Ash.Resource.Info.actions()
+    |> Enum.find(&(&1.type == entity.type && &1.primary?))
+    |> case do
+      nil ->
+        suggestions =
+          entity.resource
+          |> Ash.Resource.Info.actions()
+          |> Enum.filter(&(&1.type == entity.type))
+          |> Enum.map(&to_string(&1.name))
+          |> sorted_suggestions(entity.action,
+            prefix: "Available #{entity.type} actions are ",
+            suffix: ".",
+            final_sep: " and "
+          )
+
+        {:error,
+         DslError.exception(
+           module: Transformer.get_persisted(dsl_state, :module),
+           path: [:reactor, entity.type, entity.name],
+           message:
+             "The step `#{inspect(entity.name)}` has no action name specified and no primary #{entity.type} action." <>
+               suggestions
+         )}
+
+      action ->
+        {:ok, action}
+    end
+  end
+
   defp get_entity_resource_action(entity, dsl_state) do
     case Ash.Resource.Info.action(entity.resource, entity.action, entity.type) do
       nil ->
@@ -301,20 +334,22 @@ defmodule Ash.Reactor.Dsl.Transformer do
 
   defp maybe_validate_upsert_identity(_entity, _dsl_state), do: :ok
 
-  defp sorted_suggestions([], _), do: ""
+  defp sorted_suggestions(suggestions, tried, options \\ [])
+  defp sorted_suggestions([], _, _), do: ""
 
-  defp sorted_suggestions(suggestions, tried) do
+  defp sorted_suggestions(suggestions, tried, options) do
     tried = to_string(tried)
+
+    prefix = Keyword.get(options, :prefix, "Did you mean ")
+    suffix = Keyword.get(options, :suffix, "?")
 
     suggestions
     |> Enum.map(&to_string/1)
     |> Enum.sort_by(&String.jaro_distance(&1, tried))
     |> Enum.map(&"`#{&1}`")
-    |> to_sentence()
-    |> then(&"\n\nDid you mean #{&1}?")
+    |> to_sentence(options)
+    |> then(&"\n\n#{prefix}#{&1}#{suffix}")
   end
-
-  defp to_sentence(values, opts \\ [])
 
   defp to_sentence([value], _opts), do: to_string(value)
 
